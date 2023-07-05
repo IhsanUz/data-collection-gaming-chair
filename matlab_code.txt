@@ -1,0 +1,57 @@
+% Store the channel ID for the moisture sensor channel.
+channelID = 1600271;
+
+% Provide the ThingSpeak alerts API key.  All alerts API keys start with TAK.
+alertApiKey = 'TAKUHD9DNCGZDAAFTQFBR';
+readAPIKey = '4MC7LB8V91JY64AT';
+CollectFirst_APIKey = 'CBCJPKM9JYPN9GJZ';
+
+% Set the address for the HTTTP call
+alertUrl="https://api.thingspeak.com/alerts/send";
+
+% webwrite uses weboptions to add required headers.  Alerts needs a ThingSpeak-Alerts-API-Key header.
+options = weboptions("HeaderFields", ["ThingSpeak-Alerts-API-Key", alertApiKey ]);
+
+% Set the email subject.
+alertSubject = sprintf("Sitting Status : ");
+firsttemp = thingSpeakRead(1615984,'NumPoints',1,'Fields',1,'ReadKey',CollectFirst_APIKey);
+firsthum = thingSpeakRead(1615984,'NumPoints',1,'Fields',2,'ReadKey',CollectFirst_APIKey);
+firstdistance = thingSpeakRead(1615984,'NumPoints',1,'Fields',3,'ReadKey',CollectFirst_APIKey);
+
+display(firstdistance,'Fist Distance');
+% Read the recent data.
+Alltemp_Data = thingSpeakRead(channelID,'NumMinutes',5,'Fields',1,'ReadKey',readAPIKey);
+Allhum_Data = thingSpeakRead(channelID,'NumMinutes',5,'Fields',2,'ReadKey',readAPIKey);
+Alldist_Data = thingSpeakRead(channelID,'NumMinutes',5,'Fields',3,'ReadKey',readAPIKey);
+
+% Check to make sure the data was read correctly from the channel.
+if isempty(Alltemp_Data)
+    alertBody = ' No data read from temperature. ';
+elseif isempty(Allhum_Data)
+    alertBody = ' No data read from humidity. ';
+elseif isempty(Alldist_Data)
+    alertBody = ' No data read from distance. ';
+else
+    % Calculate mean data
+    average_distance = mean(Alldist_Data);
+    average_temperature = mean(Alltemp_Data);
+    display(average_distance,'Average Value'); 
+    lastDistanceValue = firstdistance - (0.1 * firstdistance);
+    lastTemperatureValue = firsttemp + (0.3 * firsttemp);
+
+    % Set the outgoing message
+    if (average_distance <= lastDistanceValue && average_temperature <= lastTemperatureValue )
+        alertBody = ' Your angle of inclination is not good. You need to fix! ';
+    elseif (average_distance <= lastDistanceValue && average_temperature > lastTemperatureValue)
+        alertBody = ' Correct your sitting position and get some rest! ';
+    elseif (average_distance > lastDistanceValue && average_temperature > lastTemperatureValue)
+        alertBody = ' Your sitting angle is correct, but you have been sitting for a very long time. ';
+    end
+end
+ 
+ % Catch errors so the MATLAB code does not disable a TimeControl if it fails
+try
+    webwrite(alertUrl , "body", alertBody, "subject", alertSubject, options);
+catch someException
+    fprintf("Failed to send alert: %s\n", someException.message);
+end
